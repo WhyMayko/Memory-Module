@@ -1018,22 +1018,6 @@ function memory_module.new(options)
         return result
     end
 
-    local function compute_look_matrix(from_pos, to_pos)
-        local dx, dy, dz = to_pos.X - from_pos.X, to_pos.Y - from_pos.Y, to_pos.Z - from_pos.Z
-        local zx, zy, zz = -dx, -dy, -dz
-        local zmag = math.sqrt(zx * zx + zy * zy + zz * zz)
-        if zmag == 0 then return nil end
-        zx, zy, zz = zx / zmag, zy / zmag, zz / zmag
-        local ux, uy, uz = 0, 1, 0
-        if math.abs(zy) > 0.9999 then ux, uy, uz = 0, 0, 1 end
-        local xx, xy, xz = uy * zz - uz * zy, uz * zx - ux * zz, ux * zy - uy * zx
-        local xmag = math.sqrt(xx * xx + xy * xy + xz * xz)
-        if xmag == 0 then return nil end
-        xx, xy, xz = xx / xmag, xy / xmag, xz / xmag
-        local yx, yy, yz = zy * xz - zz * xy, zz * xx - zx * xz, zx * xy - zy * xx
-        return { xx, yx, zx, xy, yy, zy, xz, yz, zz }
-    end
-
     function self:setvehiclevelocity(seat, chassis, velocity)
         if typeof(velocity) ~= "Vector3" then
             fail("setvehiclevelocity expects Vector3")
@@ -1054,58 +1038,12 @@ function memory_module.new(options)
         memory_write("float", prim.pointer + av + 8, 0)
     end
 
-    function self:freezevelocity(part)
+    function self:lookat(part, target_pos)
         local inst = (type(part) == "table" and part.instance) and part.instance or part
-        if typeof(inst) ~= "Instance" then return false end
-        inst.AssemblyLinearVelocity = Vector3.zero
-        inst.AssemblyAngularVelocity = Vector3.zero
-        local prim = self:primitive(inst)
-        if prim then
-            local lv = prim.profile.linearvelocity
-            local av = prim.profile.angularvelocity
-            memory_write("float", prim.pointer + lv, 0)
-            memory_write("float", prim.pointer + lv + 4, 0)
-            memory_write("float", prim.pointer + lv + 8, 0)
-            memory_write("float", prim.pointer + av, 0)
-            memory_write("float", prim.pointer + av + 4, 0)
-            memory_write("float", prim.pointer + av + 8, 0)
-        end
-        return true
-    end
-
-    function self:distance(a, b)
-        local pos_a = typeof(a) == "Vector3" and a or (a and a.Position)
-        local pos_b = typeof(b) == "Vector3" and b or (b and b.Position)
-        if not pos_a or not pos_b then return math.huge end
-        return (pos_a - pos_b).Magnitude
-    end
-
-    function self:lookat(part, target_pos, method)
-        local inst = (type(part) == "table" and part.instance) and part.instance or part
-        if typeof(inst) ~= "Instance" or not validaddress(inst.Address) or typeof(target_pos) ~= "Vector3" then
+        if typeof(inst) ~= "Instance" or typeof(target_pos) ~= "Vector3" then
             return false
         end
-        local my_pos = inst.Position
-        if (target_pos - my_pos).Magnitude == 0 then return false end
-
-        local m = method or "hybrid"
-        if m == "cframe" then
-            inst.CFrame = CFrame.lookAt(my_pos, target_pos)
-            return true
-        end
-
-        local primitive = self:primitive(inst)
-        if primitive then
-            local mat = compute_look_matrix(my_pos, target_pos)
-            if mat then
-                self:writematrix(primitive.pointer + primitive.profile.rotation, mat)
-                if m == "hybrid" then
-                    inst.CFrame = CFrame.lookAt(my_pos, target_pos)
-                end
-                return true
-            end
-        end
-        inst.CFrame = CFrame.lookAt(my_pos, target_pos)
+        inst.CFrame = CFrame.lookAt(inst.Position, target_pos)
         return true
     end
 
