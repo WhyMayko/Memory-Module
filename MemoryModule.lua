@@ -1038,12 +1038,26 @@ function memory_module.new(options)
         memory_write("float", prim.pointer + av + 8, 0)
     end
 
-    function self:lookat(part, target_pos)
+    function self:lookat(part, target_pos, method)
         local inst = (type(part) == "table" and part.instance) and part.instance or part
         if typeof(inst) ~= "Instance" or typeof(target_pos) ~= "Vector3" then
             return false
         end
+        if method == "rotation" then
+            local prim = self:primitive(inst)
+            if prim and prim.pointer and prim.profile and prim.profile.rotation then
+                local _, _, _, r00, r01, r02, r10, r11, r12, r20, r21, r22 = CFrame.lookAt(inst.Position, target_pos):GetComponents()
+                local rot_addr = prim.pointer + prim.profile.rotation
+                local mat = { r00, r01, r02, r10, r11, r12, r20, r21, r22 }
+                for i = 1, 9 do
+                    memory_write("float", rot_addr + (i - 1) * 4, mat[i])
+                end
+                return true
+            end
+        end
+        local old_vel = inst.AssemblyLinearVelocity
         inst.CFrame = CFrame.lookAt(inst.Position, target_pos)
+        inst.AssemblyLinearVelocity = old_vel
         return true
     end
 
