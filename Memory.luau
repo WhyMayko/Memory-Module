@@ -57,6 +57,11 @@ function Memory:init(offsets_data, types_data)
     return self
 end
 
+local base_classes = {
+    Part = "BasePart", MeshPart = "BasePart", WedgePart = "BasePart", CornerWedgePart = "BasePart", TrussPart = "BasePart", Seat = "BasePart", VehicleSeat = "BasePart", SpawnLocation = "BasePart",
+    Frame = "GuiObject", ScrollingFrame = "GuiObject", TextLabel = "GuiObject", TextButton = "GuiObject", TextBox = "GuiObject", ImageLabel = "GuiObject", ImageButton = "GuiObject", ScreenGui = "GuiObject", BillboardGui = "GuiObject", SurfaceGui = "GuiObject"
+}
+
 function Memory:resolve(inst, prop)
     if not self.Offsets then self:init() end
     local prop_lower = prop:lower()
@@ -75,14 +80,14 @@ function Memory:resolve(inst, prop)
     end
 
     if is_inst then
-        local off, kind, cls, k = match_class(inst.ClassName)
+        local cname = inst.ClassName
+        local off, kind, cls, k = match_class(cname)
         if off then return off, kind, cls, k end
 
-        for cls_name in pairs(self.Offsets) do
-            if cls_name ~= inst.ClassName and cls_name ~= "Misc" and inst:IsA(cls_name) then
-                local off, kind, cls, k = match_class(cls_name)
-                if off then return off, kind, cls, k end
-            end
+        local base = base_classes[cname]
+        if base then
+            off, kind, cls, k = match_class(base)
+            if off then return off, kind, cls, k end
         end
     end
 
@@ -171,7 +176,7 @@ end
 function Memory:animations(animator)
     if not self.Offsets then self:init() end
     local inst = (type(animator) == "table" and animator.Instance) and animator.Instance or animator
-    if typeof(inst) == "Instance" and (inst:IsA("Humanoid") or inst:IsA("Model")) then
+    if typeof(inst) == "Instance" and inst.ClassName ~= "Animator" then
         inst = inst:FindFirstChildOfClass("Animator")
     end
     if not inst then return {} end
