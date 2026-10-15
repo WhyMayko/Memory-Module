@@ -376,17 +376,31 @@ function Memory.new(offsets_data, types_data)
         Types = Memory.Types,
     }
     local meta = {
+        __call = function(_, inst)
+            return Memory:Bind(inst)
+        end,
         __index = function(self, key)
+            if typeof(key) == "Instance" then
+                return Memory:Bind(key)
+            end
             if Memory[key] then return Memory[key] end
             local char = players.LocalPlayer and players.LocalPlayer.Character
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-            if hum then
-                local off = Memory:Resolve(hum, key)
-                if off then return Memory:Get(hum, key) end
+            if char then
+                local child = char:FindFirstChild(key)
+                if child then return Memory:Bind(child) end
+                local hum = char:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    local off = Memory:Resolve(hum, key)
+                    if off then return Memory:Get(hum, key) end
+                end
             end
             return rawget(self, key)
         end,
         __newindex = function(self, key, value)
+            if typeof(key) == "Instance" then
+                rawset(self, key, value)
+                return
+            end
             local char = players.LocalPlayer and players.LocalPlayer.Character
             local hum = char and char:FindFirstChildOfClass("Humanoid")
             if hum then
@@ -401,6 +415,18 @@ function Memory.new(offsets_data, types_data)
     }
     return setmetatable(obj, meta)
 end
+
+setmetatable(Memory, {
+    __call = function(_, inst)
+        return Memory:Bind(inst)
+    end,
+    __index = function(self, key)
+        if typeof(key) == "Instance" then
+            return Memory:Bind(key)
+        end
+        return rawget(self, key)
+    end
+})
 
 _G.Memory = Memory
 return Memory

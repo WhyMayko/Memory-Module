@@ -1,18 +1,21 @@
-local Memory = loadstring(game:HttpGet("https://raw.githubusercontent.com/WhyMayko/Memory-Module/main/Memory.luau"))()
-Memory:Init()
+local memory = loadstring(game:HttpGet("https://raw.githubusercontent.com/WhyMayko/Memory-Module/main/Memory.luau"))().new()
 
-local char = game:GetService("Players").LocalPlayer.Character
+local player = game:GetService("Players").LocalPlayer
+local char = player.Character
 
-local hum = Memory:Bind(char.Humanoid)
-print("Current WalkSpeed: " .. tostring(hum.Walkspeed))
-print("Current Health: " .. tostring(hum.Health))
+print("WalkSpeed: " .. tostring(memory.walkspeed))
+memory.walkspeed = 32
 
-hum.Walkspeed = 28
-print("New WalkSpeed: " .. tostring(hum.Walkspeed))
-
-Memory:LookAt(char.HumanoidRootPart, Vector3.new(0, 100, 0))
-
-local active_tracks = Memory:Animations(char.Humanoid)
-for id in pairs(active_tracks) do
-    print("Playing animation track: " .. id)
+local prompt = workspace:FindFirstChildOfClass("ProximityPrompt")
+if prompt then
+    memory(prompt).Enabled = true
+    memory(prompt).HoldDuration = 0
 end
+
+local frame = player.PlayerGui:FindFirstChildWhichIsA("Frame", true)
+if frame then
+    print("Frame visible: " .. tostring(memory(frame).visible))
+    memory(frame).visible = false
+end
+
+memory:lookat(char.HumanoidRootPart, Vector3.new(0, 100, 0))
