@@ -1,97 +1,73 @@
-Memory = Memory or {}
-Memory.Offsets = nil
-Memory.Types = nil
+Memory = { Offsets = nil, Types = nil }
 
-Memory.OffsetUrls = {
+local players = game:GetService("Players")
+local httpservice = game:GetService("HttpService")
+
+local urls_offsets = {
     "https://offsets.imtheo.lol/Offsets.json",
     "https://offsets.femboythighs.org/Offsets.json",
     "https://raw.githubusercontent.com/WhyMayko/Matcha-Scripts/refs/heads/main/Offsets/Offsets.json",
 }
-
-Memory.TypeUrls = {
+local urls_types = {
     "https://offsets.imtheo.lol/types.json",
     "https://offsets.femboythighs.org/types.json",
     "https://raw.githubusercontent.com/WhyMayko/Matcha-Scripts/refs/heads/main/Offsets/types.json",
 }
 
-local players = game:GetService("Players")
-local httpservice = game:GetService("HttpService")
-
 local type_map = {
-    ["float"] = "float",
-    ["double"] = "double",
-    ["int"] = "int",
-    ["short"] = "int",
-    ["bool"] = "bool",
-    ["byte"] = "byte",
-    ["unsigned char"] = "byte",
-    ["string"] = "string",
-    ["unsigned __int64"] = "uintptr_t",
-    ["uintptr_t"] = "uintptr_t",
-    ["pointer"] = "uintptr_t",
-    ["Vector3"] = "vector3",
-    ["Matrix3x3"] = "matrix",
+    float = "float", double = "double", int = "int", short = "int", bool = "bool", byte = "byte",
+    ["unsigned char"] = "byte", string = "string", ["unsigned __int64"] = "uintptr_t",
+    uintptr_t = "uintptr_t", pointer = "uintptr_t", Vector3 = "vector3", Matrix3x3 = "matrix"
 }
-
-local function fetch_json(urls)
-    for _, url in ipairs(urls) do
-        local raw = game:HttpGet(url)
-        if raw and #raw > 10 then
-            local data = httpservice:JSONDecode(raw)
-            if data then return data end
-        end
-    end
-    assert(false, "failed to fetch remote manifest!")
-end
-
-function Memory:init(offsets_data, types_data)
-    if offsets_data and types_data then
-        self.Offsets = offsets_data
-        self.Types = types_data
-        return self
-    end
-    local off_doc = fetch_json(self.OffsetUrls)
-    self.Offsets = off_doc.Offsets or off_doc
-    local typ_doc = fetch_json(self.TypeUrls)
-    self.Types = typ_doc.Types or typ_doc
-    return self
-end
 
 local base_classes = {
     Part = "BasePart", MeshPart = "BasePart", WedgePart = "BasePart", CornerWedgePart = "BasePart", TrussPart = "BasePart", Seat = "BasePart", VehicleSeat = "BasePart", SpawnLocation = "BasePart",
     Frame = "GuiObject", ScrollingFrame = "GuiObject", TextLabel = "GuiObject", TextButton = "GuiObject", TextBox = "GuiObject", ImageLabel = "GuiObject", ImageButton = "GuiObject", ScreenGui = "GuiObject", BillboardGui = "GuiObject", SurfaceGui = "GuiObject"
 }
 
+local function fetch(urls)
+    for _, u in ipairs(urls) do
+        local r = game:HttpGet(u)
+        if r and #r > 10 then
+            local d = httpservice:JSONDecode(r)
+            if d then return d.Offsets or d.Types or d end
+        end
+    end
+    assert(false, "failed to fetch remote manifest!")
+end
+
+function Memory:init(o, t)
+    self.Offsets = o or fetch(urls_offsets)
+    self.Types = t or fetch(urls_types)
+    return self
+end
+
 function Memory:resolve(inst, prop)
     if not self.Offsets then self:init() end
-    local prop_lower = prop:lower()
+    local pl = prop:lower()
     local is_inst = typeof(inst) == "Instance"
 
-    local function match_class(cls)
-        local offsets = self.Offsets[cls]
-        if not offsets then return end
-        for k, off in pairs(offsets) do
+    local function match(cls)
+        local o = self.Offsets[cls]
+        if not o then return end
+        for k, off in pairs(o) do
             local kl = k:lower()
-            if kl == prop_lower or (prop_lower == "enabled" and kl == "screengui_enabled") then
-                local raw_type = self.Types[cls] and self.Types[cls][k] or "float"
-                return off, type_map[raw_type] or "float", cls, k
+            if kl == pl or (pl == "enabled" and kl == "screengui_enabled") then
+                local raw = self.Types[cls] and self.Types[cls][k] or "float"
+                return off, type_map[raw] or "float", cls, k
             end
         end
     end
 
     if is_inst then
-        local cname = inst.ClassName
-        local off, kind, cls, k = match_class(cname)
-        if off then return off, kind, cls, k end
-
-        local base = base_classes[cname]
-        if base then
-            off, kind, cls, k = match_class(base)
-            if off then return off, kind, cls, k end
+        local c = inst.ClassName
+        local off, kind, cls, k = match(c)
+        if not off and base_classes[c] then
+            off, kind, cls, k = match(base_classes[c])
         end
+        if off then return off, kind, cls, k end
     end
-
-    return match_class("Misc")
+    return match("Misc")
 end
 
 function Memory:read(kind, addr)
@@ -113,21 +89,16 @@ function Memory:write(kind, addr, val)
     elseif kind == "string" then
         local cap = memory_read("uintptr_t", addr + 24)
         local str = tostring(val)
-        local len = #str
         local ptr = (cap >= 16) and memory_read("uintptr_t", addr) or addr
-        for i = 1, len do
-            memory_write("byte", ptr + i - 1, string.byte(str, i))
-        end
-        memory_write("byte", ptr + len, 0)
-        memory_write("uintptr_t", addr + 16, len)
+        for i = 1, #str do memory_write("byte", ptr + i - 1, string.byte(str, i)) end
+        memory_write("byte", ptr + #str, 0)
+        memory_write("uintptr_t", addr + 16, #str)
     elseif kind == "vector3" then
         memory_write("float", addr, val.X)
         memory_write("float", addr + 4, val.Y)
         memory_write("float", addr + 8, val.Z)
     elseif kind == "matrix" then
-        for i = 1, 9 do
-            memory_write("float", addr + (i - 1) * 4, val[i])
-        end
+        for i = 1, 9 do memory_write("float", addr + (i - 1) * 4, val[i]) end
     else
         memory_write(kind, addr, val)
     end
@@ -145,47 +116,37 @@ function Memory:set(inst, prop, value)
     local off, kind, cls, k = self:resolve(inst, prop)
     assert(off, "property offset not found for " .. tostring(prop) .. "!")
     self:write(kind, addr + off, value)
-    if cls == "Humanoid" and k:lower() == "walkspeed" and self.Offsets.Humanoid and self.Offsets.Humanoid.WalkspeedCheck then
+    if cls == "Humanoid" and k:lower() == "walkspeed" and self.Offsets.Humanoid.WalkspeedCheck then
         self:write("float", addr + self.Offsets.Humanoid.WalkspeedCheck, value)
     end
 end
 
 function Memory:bind(inst)
-    local proxy = { Instance = inst, Address = (typeof(inst) == "Instance") and inst.Address or inst }
-    return setmetatable(proxy, {
-        __index = function(_, k)
-            if k == "Instance" or k == "Address" then return proxy[k] end
-            return self:get(inst, k)
-        end,
-        __newindex = function(_, k, v)
-            self:set(inst, k, v)
-        end
+    local addr = (typeof(inst) == "Instance") and inst.Address or inst
+    return setmetatable({ Instance = inst, Address = addr }, {
+        __index = function(_, k) return self:get(inst, k) end,
+        __newindex = function(_, k, v) self:set(inst, k, v) end
     })
 end
 
 function Memory:lookat(part, target_pos)
-    if not self.Offsets then self:init() end
     local inst = (type(part) == "table" and part.Instance) and part.Instance or part
-    local prim_ptr = memory_read("uintptr_t", inst.Address + self.Offsets.BasePart.Primitive)
-    if not (prim_ptr and prim_ptr > 4096) then return false end
+    local prim = memory_read("uintptr_t", inst.Address + self.Offsets.BasePart.Primitive)
+    if not (prim and prim > 4096) then return false end
     local _, _, _, r00, r01, r02, r10, r11, r12, r20, r21, r22 = CFrame.lookAt(inst.Position, target_pos):GetComponents()
-    self:write("matrix", prim_ptr + self.Offsets.Primitive.Rotation, { r00, r01, r02, r10, r11, r12, r20, r21, r22 })
+    self:write("matrix", prim + self.Offsets.Primitive.Rotation, { r00, r01, r02, r10, r11, r12, r20, r21, r22 })
     return true
 end
 
 function Memory:animations(animator)
-    if not self.Offsets then self:init() end
     local inst = (type(animator) == "table" and animator.Instance) and animator.Instance or animator
     if typeof(inst) == "Instance" and inst.ClassName ~= "Animator" then
         inst = inst:FindFirstChildOfClass("Animator")
     end
     if not inst then return {} end
-    local addr = (typeof(inst) == "Instance") and inst.Address or inst
-    local head = memory_read("uintptr_t", addr + self.Offsets.Animator.ActiveAnimations)
+    local head = memory_read("uintptr_t", inst.Address + self.Offsets.Animator.ActiveAnimations)
     if not (head and head > 4096) then return {} end
-    local current = memory_read("uintptr_t", head)
-    local result = {}
-    local count = 0
+    local current, result, count = memory_read("uintptr_t", head), {}, 0
     while current and current ~= head and count < 40 do
         count = count + 1
         local track = memory_read("uintptr_t", current + 16)
@@ -205,65 +166,41 @@ function Memory:animations(animator)
 end
 
 function Memory:set_animation_id(animation, id)
-    if not self.Offsets then self:init() end
     local inst = (type(animation) == "table" and animation.Instance) and animation.Instance or animation
-    local addr = (typeof(inst) == "Instance") and inst.Address or inst
-    self:write("string", addr + self.Offsets.Misc.AnimationId, "rbxassetid://" .. tostring(id):match("%d+"))
+    self:write("string", ((typeof(inst) == "Instance") and inst.Address or inst) + self.Offsets.Misc.AnimationId, "rbxassetid://" .. tostring(id):match("%d+"))
     return true
 end
 
 local proxy_meta = {
-    __call = function(_, inst)
-        return Memory:bind(inst)
-    end,
+    __call = function(_, inst) return Memory:bind(inst) end,
     __index = function(self, key)
         if typeof(key) == "Instance" then return Memory:bind(key) end
         if Memory[key] then return Memory[key] end
-        local char = players.LocalPlayer and players.LocalPlayer.Character
-        if char then
-            local child = char:FindFirstChild(key)
-            if child then return Memory:bind(child) end
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if hum then
-                local off = Memory:resolve(hum, key)
-                if off then return Memory:get(hum, key) end
-            end
+        local hum = players.LocalPlayer and players.LocalPlayer.Character and players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            local off = Memory:resolve(hum, key)
+            if off then return Memory:get(hum, key) end
         end
         return rawget(self, key)
     end,
     __newindex = function(self, key, value)
-        local char = players.LocalPlayer and players.LocalPlayer.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        local hum = players.LocalPlayer and players.LocalPlayer.Character and players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
         if hum then
             local off = Memory:resolve(hum, key)
-            if off then
-                Memory:set(hum, key, value)
-                return
-            end
+            if off then return Memory:set(hum, key, value) end
         end
         rawset(self, key, value)
     end
 }
 
 setmetatable(Memory, {
-    __call = function(_, inst)
-        return Memory:bind(inst)
-    end,
-    __index = function(self, key)
-        if typeof(key) == "Instance" then return Memory:bind(key) end
-        return rawget(self, key)
-    end
+    __call = function(_, inst) return Memory:bind(inst) end,
+    __index = function(self, key) return typeof(key) == "Instance" and Memory:bind(key) or rawget(self, key) end
 })
 
-function Memory.new(offsets_data, types_data)
-    if not Memory.Offsets then
-        Memory:init(offsets_data, types_data)
-    end
-    local obj = {
-        Offsets = Memory.Offsets,
-        Types = Memory.Types,
-    }
-    return setmetatable(obj, proxy_meta)
+function Memory.new(o, t)
+    if not Memory.Offsets then Memory:init(o, t) end
+    return setmetatable({ Offsets = Memory.Offsets, Types = Memory.Types }, proxy_meta)
 end
 
 _G.Memory = Memory
