@@ -1,4 +1,5 @@
-local memory = loadstring(game:HttpGet("https://raw.githubusercontent.com/WhyMayko/Memory-Module/main/Memory.luau"))().new()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/WhyMayko/Memory-Module/main/Memory.luau"))()
+local memory = _G.Memory.new()
 
 local player = game:GetService("Players").LocalPlayer
 local char = player.Character
