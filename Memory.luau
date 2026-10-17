@@ -4,14 +4,10 @@ local players = game:GetService("Players")
 local httpservice = game:GetService("HttpService")
 
 local urls_offsets = {
-    "https://offsets.imtheo.lol/Offsets.json",
-    "https://offsets.femboythighs.org/Offsets.json",
-    "https://raw.githubusercontent.com/WhyMayko/Matcha-Scripts/refs/heads/main/Offsets/Offsets.json",
+    "https://offsets.imtheo.lol/offsets.json",
 }
 local urls_types = {
     "https://offsets.imtheo.lol/types.json",
-    "https://offsets.femboythighs.org/types.json",
-    "https://raw.githubusercontent.com/WhyMayko/Matcha-Scripts/refs/heads/main/Offsets/types.json",
 }
 
 local type_map = {
