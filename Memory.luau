@@ -4,21 +4,26 @@ local players = game:GetService("Players")
 local httpservice = game:GetService("HttpService")
 
 local urls_offsets = {
-    "https://raw.githubusercontent.com/WhyMayko/Memory-Module/main/Offsets/Offsets.json",
-    "https://raw.githubusercontent.com/WhyMayko/Matcha-Scripts/main/Offsets/Offsets.json",
-    "https://offsets.imtheo.lol/offsets.json"
+    "https://offsets.imtheo.lol/offsets.json",
 }
 local urls_types = {
-    "https://raw.githubusercontent.com/WhyMayko/Memory-Module/main/Offsets/types.json",
-    "https://raw.githubusercontent.com/WhyMayko/Matcha-Scripts/main/Offsets/types.json",
-    "https://offsets.imtheo.lol/types.json"
+    "https://offsets.imtheo.lol/types.json",
 }
 
 local type_map = {
     float = "float", double = "double", int = "int", short = "int", bool = "bool", byte = "byte", BYTE = "byte",
     ["unsigned char"] = "byte", string = "string", ["unsigned __int64"] = "uintptr_t",
     uintptr_t = "uintptr_t", pointer = "uintptr_t", Vector3 = "vector3", Vector2 = "vector2",
-    Color3 = "color3", Matrix3x3 = "matrix"
+    Color3 = "color3", Matrix3x3 = "matrix", UDim2 = "udim2"
+}
+
+local primitive_props = {
+    position = "Position",
+    rotation = "Rotation",
+    size = "Size",
+    assemblylinearvelocity = "AssemblyLinearVelocity",
+    assemblyangularvelocity = "AssemblyAngularVelocity",
+    velocity = "AssemblyLinearVelocity"
 }
 
 local inheritance = {
@@ -119,8 +124,20 @@ function Memory:resolve(inst, prop)
             if pl == "x" then return 296, "float", "UIGradient", "X" end
             if pl == "y" then return 300, "float", "UIGradient", "Y" end
         end
+
+        local is_part = c == "Part" or c == "MeshPart" or c == "BasePart" or (inheritance[c] and inheritance[c][1] == "BasePart")
+        if is_part and primitive_props[pl] then
+            local pk = primitive_props[pl]
+            local po = self.Offsets.Primitive and self.Offsets.Primitive[pk]
+            if po then
+                local pkind = (pk == "Rotation") and "matrix" or "vector3"
+                return po, pkind, "Primitive", pk
+            end
+        end
+
         local off, kind, cls, k = match(c)
         if off then return off, kind, cls, k end
+
         local chain = inheritance[c]
         if chain then
             for _, base in ipairs(chain) do
@@ -145,6 +162,13 @@ function Memory:read(kind, addr)
         return Vector3.new(memory_read("float", addr), memory_read("float", addr + 4), memory_read("float", addr + 8))
     elseif kind == "color3" then
         return Color3.new(memory_read("float", addr), memory_read("float", addr + 4), memory_read("float", addr + 8))
+    elseif kind == "udim2" then
+        return UDim2.new(
+            memory_read("float", addr),
+            memory_read("int", addr + 4),
+            memory_read("float", addr + 8),
+            memory_read("int", addr + 12)
+        )
     elseif kind == "bool" then
         return memory_read("byte", addr) ~= 0
     end
@@ -172,6 +196,11 @@ function Memory:write(kind, addr, val)
         memory_write("float", addr, val.R)
         memory_write("float", addr + 4, val.G)
         memory_write("float", addr + 8, val.B)
+    elseif kind == "udim2" then
+        memory_write("float", addr, val.X.Scale)
+        memory_write("int", addr + 4, val.X.Offset)
+        memory_write("float", addr + 8, val.Y.Scale)
+        memory_write("int", addr + 12, val.Y.Offset)
     elseif kind == "matrix" then
         for i = 1, 9 do memory_write("float", addr + (i - 1) * 4, val[i]) end
     else
@@ -181,8 +210,12 @@ end
 
 function Memory:get(inst, prop)
     local addr = (typeof(inst) == "Instance") and inst.Address or inst
-    local off, kind = self:resolve(inst, prop)
+    local off, kind, cls = self:resolve(inst, prop)
     assert(off, "property offset not found for " .. tostring(prop) .. "!")
+    if cls == "Primitive" then
+        addr = memory_read("uintptr_t", addr + self.Offsets.BasePart.Primitive)
+        assert(addr and addr > 4096, "primitive pointer invalid!")
+    end
     return self:read(kind, addr + off)
 end
 
@@ -190,6 +223,10 @@ function Memory:set(inst, prop, value)
     local addr = (typeof(inst) == "Instance") and inst.Address or inst
     local off, kind, cls, k = self:resolve(inst, prop)
     assert(off, "property offset not found for " .. tostring(prop) .. "!")
+    if cls == "Primitive" then
+        addr = memory_read("uintptr_t", addr + self.Offsets.BasePart.Primitive)
+        assert(addr and addr > 4096, "primitive pointer invalid!")
+    end
     self:write(kind, addr + off, value)
     if cls == "Humanoid" and k:lower() == "walkspeed" and self.Offsets.Humanoid.WalkspeedCheck then
         self:write("float", addr + self.Offsets.Humanoid.WalkspeedCheck, value)
