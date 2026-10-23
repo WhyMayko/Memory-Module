@@ -156,6 +156,25 @@ The shipped `Offsets.json` manifest is dumped per Roblox build and drifts betwee
 
 Status: runtime validated. The verified profile was confirmed against a live client in Wanted (place `14438406081`) on the `version-ddf602d9cfe44005` manifest, where the manifest's own `BasePart.Primitive`, `Primitive.Position`, `Primitive.Rotation`, `Primitive.AssemblyLinearVelocity` and `Primitive.AssemblyAngularVelocity` entries are all wrong while `Primitive.Owner`, `Primitive.Size` and `Primitive.Flags` are correct. That divergence is exactly why calibration is mandatory.
 
+### memory(inst).gradient
+
+Returns a live proxy for a UIGradient instance or any GuiObject containing one (e.g. ImageLabel, ImageButton, Frame). Enables reading and writing gradient offsets directly through memory:
+
+`lua
+local grad = memory(bar).gradient
+
+-- Real-time read
+local is_ready = grad.Ready     -- boolean (Offset.Y <= 0.255)
+local offset   = grad.Offset    -- Vector2(X, Y)
+local y        = grad.Y         -- float (address + 300)
+local x        = grad.X         -- float (address + 296)
+local pct      = grad.Progress  -- normalized float 0.0 to 1.0
+
+-- Real-time write
+grad.Offset = Vector2.new(0, 0.25)
+grad.Y = 0.25
+`
+
 ### Safe Raw Memory Access
 
 Direct, guarded accessors with null/invalid address protection (returns `nil` instead of throwing):
