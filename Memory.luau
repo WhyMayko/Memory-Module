@@ -4,21 +4,78 @@ local players = game:GetService("Players")
 local httpservice = game:GetService("HttpService")
 
 local urls_offsets = {
-    "https://offsets.imtheo.lol/offsets.json",
+    "https://raw.githubusercontent.com/WhyMayko/Memory-Module/main/Offsets/Offsets.json",
+    "https://raw.githubusercontent.com/WhyMayko/Matcha-Scripts/main/Offsets/Offsets.json",
+    "https://offsets.imtheo.lol/offsets.json"
 }
 local urls_types = {
-    "https://offsets.imtheo.lol/types.json",
+    "https://raw.githubusercontent.com/WhyMayko/Memory-Module/main/Offsets/types.json",
+    "https://raw.githubusercontent.com/WhyMayko/Matcha-Scripts/main/Offsets/types.json",
+    "https://offsets.imtheo.lol/types.json"
 }
 
 local type_map = {
-    float = "float", double = "double", int = "int", short = "int", bool = "bool", byte = "byte",
+    float = "float", double = "double", int = "int", short = "int", bool = "bool", byte = "byte", BYTE = "byte",
     ["unsigned char"] = "byte", string = "string", ["unsigned __int64"] = "uintptr_t",
-    uintptr_t = "uintptr_t", pointer = "uintptr_t", Vector3 = "vector3", Matrix3x3 = "matrix"
+    uintptr_t = "uintptr_t", pointer = "uintptr_t", Vector3 = "vector3", Vector2 = "vector2",
+    Color3 = "color3", Matrix3x3 = "matrix"
 }
 
-local base_classes = {
-    Part = "BasePart", MeshPart = "BasePart", WedgePart = "BasePart", CornerWedgePart = "BasePart", TrussPart = "BasePart", Seat = "BasePart", VehicleSeat = "BasePart", SpawnLocation = "BasePart",
-    Frame = "GuiObject", ScrollingFrame = "GuiObject", TextLabel = "GuiObject", TextButton = "GuiObject", TextBox = "GuiObject", ImageLabel = "GuiObject", ImageButton = "GuiObject", ScreenGui = "GuiObject", BillboardGui = "GuiObject", SurfaceGui = "GuiObject"
+local inheritance = {
+    Part = {"BasePart", "Instance"},
+    MeshPart = {"MeshPart", "BasePart", "Instance"},
+    WedgePart = {"BasePart", "Instance"},
+    CornerWedgePart = {"BasePart", "Instance"},
+    TrussPart = {"BasePart", "Instance"},
+    Seat = {"Seat", "BasePart", "Instance"},
+    VehicleSeat = {"VehicleSeat", "BasePart", "Instance"},
+    SpawnLocation = {"SpawnLocation", "BasePart", "Instance"},
+    UnionOperation = {"UnionOperation", "BasePart", "Instance"},
+    Frame = {"GuiObject", "GuiBase2D", "Instance"},
+    ScrollingFrame = {"GuiObject", "GuiBase2D", "Instance"},
+    TextLabel = {"GuiObject", "GuiBase2D", "Instance"},
+    TextButton = {"GuiObject", "GuiBase2D", "Instance"},
+    TextBox = {"GuiObject", "GuiBase2D", "Instance"},
+    ImageLabel = {"GuiObject", "GuiBase2D", "Instance"},
+    ImageButton = {"GuiObject", "GuiBase2D", "Instance"},
+    ViewportFrame = {"GuiObject", "GuiBase2D", "Instance"},
+    VideoFrame = {"GuiObject", "GuiBase2D", "Instance"},
+    ScreenGui = {"GuiObject", "GuiBase2D", "Instance"},
+    BillboardGui = {"GuiObject", "GuiBase2D", "Instance"},
+    SurfaceGui = {"GuiObject", "GuiBase2D", "Instance"},
+    BloomEffect = {"BloomEffect", "Instance"},
+    BlurEffect = {"BlurEffect", "Instance"},
+    ColorCorrectionEffect = {"ColorCorrectionEffect", "Instance"},
+    ColorGradingEffect = {"ColorGradingEffect", "Instance"},
+    DepthOfFieldEffect = {"DepthOfFieldEffect", "Instance"},
+    SunRaysEffect = {"SunRaysEffect", "Instance"},
+    Humanoid = {"Humanoid", "Instance"},
+    Camera = {"Camera", "Instance"},
+    Player = {"Player", "Instance"},
+    Team = {"Team", "Instance"},
+    Tool = {"Tool", "Instance"},
+    AnimationTrack = {"AnimationTrack", "Instance"},
+    Animator = {"Animator", "Instance"},
+    ParticleEmitter = {"ParticleEmitter", "Instance"},
+    Beam = {"Beam", "Instance"},
+    Attachment = {"Attachment", "Instance"},
+    SpecialMesh = {"SpecialMesh", "Instance"},
+    ProximityPrompt = {"ProximityPrompt", "Instance"},
+    ClickDetector = {"ClickDetector", "Instance"},
+    DragDetector = {"DragDetector", "Instance"},
+    Lighting = {"Lighting", "Instance"},
+    Atmosphere = {"Atmosphere", "Instance"},
+    Sky = {"Sky", "Instance"},
+    Terrain = {"Terrain", "Instance"},
+    Sound = {"Sound", "Instance"},
+    LocalScript = {"LocalScript", "Script", "Instance"},
+    ModuleScript = {"ModuleScript", "Instance"},
+    Script = {"Script", "Instance"},
+    Workspace = {"Workspace", "World", "Instance"},
+    World = {"World", "Instance"},
+    DataModel = {"DataModel", "Instance"},
+    RunService = {"RunService", "Instance"},
+    UserInputService = {"UserInputService", "Instance"}
 }
 
 local function fetch(urls)
@@ -56,16 +113,22 @@ function Memory:resolve(inst, prop)
     end
 
     if is_inst then
-        if inst.ClassName == "UIGradient" then
+        local c = inst.ClassName
+        if c == "UIGradient" then
             if pl == "offset" then return 296, "vector2", "UIGradient", "Offset" end
             if pl == "x" then return 296, "float", "UIGradient", "X" end
             if pl == "y" then return 300, "float", "UIGradient", "Y" end
         end
-        local c = inst.ClassName
         local off, kind, cls, k = match(c)
-        if not off and base_classes[c] then
-            off, kind, cls, k = match(base_classes[c])
+        if off then return off, kind, cls, k end
+        local chain = inheritance[c]
+        if chain then
+            for _, base in ipairs(chain) do
+                off, kind, cls, k = match(base)
+                if off then return off, kind, cls, k end
+            end
         end
+        off, kind, cls, k = match("Instance")
         if off then return off, kind, cls, k end
     end
     return match("Misc")
@@ -80,6 +143,8 @@ function Memory:read(kind, addr)
         return Vector2.new(memory_read("float", addr), memory_read("float", addr + 4))
     elseif kind == "vector3" then
         return Vector3.new(memory_read("float", addr), memory_read("float", addr + 4), memory_read("float", addr + 8))
+    elseif kind == "color3" then
+        return Color3.new(memory_read("float", addr), memory_read("float", addr + 4), memory_read("float", addr + 8))
     elseif kind == "bool" then
         return memory_read("byte", addr) ~= 0
     end
@@ -103,6 +168,10 @@ function Memory:write(kind, addr, val)
         memory_write("float", addr, val.X)
         memory_write("float", addr + 4, val.Y)
         memory_write("float", addr + 8, val.Z)
+    elseif kind == "color3" then
+        memory_write("float", addr, val.R)
+        memory_write("float", addr + 4, val.G)
+        memory_write("float", addr + 8, val.B)
     elseif kind == "matrix" then
         for i = 1, 9 do memory_write("float", addr + (i - 1) * 4, val[i]) end
     else
