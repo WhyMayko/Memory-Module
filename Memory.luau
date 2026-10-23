@@ -56,6 +56,11 @@ function Memory:resolve(inst, prop)
     end
 
     if is_inst then
+        if inst.ClassName == "UIGradient" then
+            if pl == "offset" then return 296, "vector2", "UIGradient", "Offset" end
+            if pl == "x" then return 296, "float", "UIGradient", "X" end
+            if pl == "y" then return 300, "float", "UIGradient", "Y" end
+        end
         local c = inst.ClassName
         local off, kind, cls, k = match(c)
         if not off and base_classes[c] then
@@ -71,6 +76,8 @@ function Memory:read(kind, addr)
         local cap = memory_read("uintptr_t", addr + 24)
         local ptr = (cap >= 16) and memory_read("uintptr_t", addr) or addr
         return memory_read("string", ptr)
+    elseif kind == "vector2" then
+        return Vector2.new(memory_read("float", addr), memory_read("float", addr + 4))
     elseif kind == "vector3" then
         return Vector3.new(memory_read("float", addr), memory_read("float", addr + 4), memory_read("float", addr + 8))
     elseif kind == "bool" then
@@ -89,6 +96,9 @@ function Memory:write(kind, addr, val)
         for i = 1, #str do memory_write("byte", ptr + i - 1, string.byte(str, i)) end
         memory_write("byte", ptr + #str, 0)
         memory_write("uintptr_t", addr + 16, #str)
+    elseif kind == "vector2" then
+        memory_write("float", addr, val.X)
+        memory_write("float", addr + 4, val.Y)
     elseif kind == "vector3" then
         memory_write("float", addr, val.X)
         memory_write("float", addr + 4, val.Y)
@@ -117,10 +127,55 @@ function Memory:set(inst, prop, value)
     end
 end
 
+function Memory:gradient(inst)
+    local target = (type(inst) == "table" and inst.Instance) and inst.Instance or inst
+    local grad = target
+    if typeof(target) == "Instance" and target.ClassName ~= "UIGradient" then
+        grad = target:FindFirstChildOfClass("UIGradient")
+    end
+    if not grad then return nil end
+    local addr = (typeof(grad) == "Instance") and grad.Address or grad
+    if not (addr and addr > 4096) then return nil end
+
+    return setmetatable({ Instance = grad, Address = addr }, {
+        __index = function(_, k)
+            local kl = tostring(k):lower()
+            if kl == "offset" then
+                return Vector2.new(memory_read("float", addr + 296), memory_read("float", addr + 300))
+            elseif kl == "x" then
+                return memory_read("float", addr + 296)
+            elseif kl == "y" then
+                return memory_read("float", addr + 300)
+            elseif kl == "ready" then
+                return memory_read("float", addr + 300) <= 0.255
+            elseif kl == "progress" then
+                local y = memory_read("float", addr + 300)
+                return math.clamp(1.0 - (y - 0.25) / 0.50, 0, 1)
+            end
+        end,
+        __newindex = function(_, k, v)
+            local kl = tostring(k):lower()
+            if kl == "offset" then
+                memory_write("float", addr + 296, v.X)
+                memory_write("float", addr + 300, v.Y)
+            elseif kl == "x" then
+                memory_write("float", addr + 296, v)
+            elseif kl == "y" then
+                memory_write("float", addr + 300, v)
+            end
+        end
+    })
+end
+
 function Memory:bind(inst)
     local addr = (typeof(inst) == "Instance") and inst.Address or inst
     return setmetatable({ Instance = inst, Address = addr }, {
-        __index = function(_, k) return self:get(inst, k) end,
+        __index = function(_, k)
+            if tostring(k):lower() == "gradient" then
+                return self:gradient(inst)
+            end
+            return self:get(inst, k)
+        end,
         __newindex = function(_, k, v) self:set(inst, k, v) end
     })
 end
